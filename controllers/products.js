@@ -1,14 +1,18 @@
 const Product = require("../models/product");
 
+// testing endpoint
 const getAllProductsStatic = async (req, res) => {
-  const products = await Product.find({}).select("name price");
+  const products = await Product.find({ price: { $gt: 30 } })
+    .sort("name")
+    .select("name price");
 
   res.status(200).json({ products, nbHits: products.length });
 };
 
+// main endpoint that has all the dynamic functionality
 const getAllProducts = async (req, res) => {
   // accessing string parameters in req.query
-  const { featured, company, name, sort, fields } = req.query;
+  const { featured, company, name, sort, fields, numericFilters } = req.query;
   const queryObject = {};
 
   if (featured) {
@@ -21,7 +25,30 @@ const getAllProducts = async (req, res) => {
     queryObject.name = { $regex: name, $options: "i" };
   }
 
-  //console.log(queryObject);
+  if (numericFilters) {
+    const operatorMap = {
+      ">": "$gt",
+      ">=": "$gte",
+      "=": "$eq",
+      "<": "$lt",
+      "<=": "$lte",
+    };
+    const regEx = /\b(<|>|>=|=|<|<=)\b/g;
+    let filters = numericFilters.replace(
+      regEx,
+      (match) => `-${operatorMap[match]}-`
+    );
+    const options = ["price", "rating"];
+    filters = filters.split(",").forEach((item) => {
+      const [field, operator, value] = item.split("-");
+      if (options.includes(field)) {
+        queryObject[field] = { [operator]: Number(value) };
+      }
+    });
+    console.log(filters);
+  }
+
+  console.log(queryObject);
   // sort method has to be chained to find method
   let result = Product.find(queryObject);
   // sort
@@ -41,7 +68,6 @@ const getAllProducts = async (req, res) => {
   const skip = (page - 1) * limit;
 
   result = result.skip(skip).limit(limit);
-  // 23
 
   const products = await result;
   res.status(200).json({ products, nbHits: products.length });
